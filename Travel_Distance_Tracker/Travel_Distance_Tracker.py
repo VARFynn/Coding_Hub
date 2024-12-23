@@ -351,7 +351,7 @@ class ModernBahnhofDistanzApp:
         finally:
             self.queue.put(("done", None))
 
-   def create_route_map(self):
+    def create_route_map(self):
         """Erstellt eine Karte mit der Route"""
         if not self.last_route:
             return None
