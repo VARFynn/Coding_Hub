@@ -11,11 +11,11 @@ import json
 from datetime import datetime
 from tkcalendar import DateEntry
 
-class ModernBahnhofDistanzApp:
+class ModernRouteTrackerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Bahnhof-Distanz Rechner")
-        self.root.geometry("600x800")  # Erhöht für zusätzliche Elemente
+        self.root.title("Reise-Tracker")
+        self.root.geometry("600x800")
         self.root.configure(bg='#ffffff')
         
         # Queue für Thread-Kommunikation
@@ -32,10 +32,31 @@ class ModernBahnhofDistanzApp:
         # Überschrift
         title_label = ttk.Label(
             main_frame, 
-            text="Bahnhof-Distanz Rechner", 
+            text="Reise-Tracker", 
             font=('Helvetica', 16, 'bold')
         )
         title_label.pack(pady=10)
+
+        # Transport-Modus Auswahl
+        mode_frame = ttk.LabelFrame(main_frame, text="Transportmittel", padding="10")
+        mode_frame.pack(fill=tk.X, pady=5)
+        
+        self.transport_mode = tk.StringVar(value="train")
+        
+        modes = [
+            ("Zug", "train", "🚂"),
+            ("Flug", "flight", "✈️"),
+            ("Auto", "car", "🚗")
+        ]
+        
+        for text, value, emoji in modes:
+            ttk.Radiobutton(
+                mode_frame,
+                text=f"{emoji} {text}",
+                value=value,
+                variable=self.transport_mode,
+                command=self.update_labels
+            ).pack(side=tk.LEFT, padx=10)
 
         # Start Station
         start_frame = ttk.LabelFrame(main_frame, text="Start", padding="10")
@@ -53,7 +74,7 @@ class ModernBahnhofDistanzApp:
         # Button für neue Zwischenstationen
         self.add_stop_btn = ttk.Button(
             main_frame, 
-            text="+ Zwischenhalt hinzufügen",
+            text="+ Zwischenstopp hinzufügen",
             command=self.add_stop
         )
         self.add_stop_btn.pack(pady=5)
@@ -92,6 +113,14 @@ class ModernBahnhofDistanzApp:
         self.date_picker = DateEntry(date_frame, width=12, background='darkblue',
                                     foreground='white', borderwidth=2)
         self.date_picker.pack(side=tk.LEFT, padx=5)
+        
+        # Dauer
+        duration_frame = ttk.Frame(save_frame)
+        duration_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(duration_frame, text="Dauer:").pack(side=tk.LEFT, padx=5)
+        self.duration_entry = ttk.Entry(duration_frame)
+        self.duration_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        ttk.Label(duration_frame, text="Stunden").pack(side=tk.LEFT, padx=5)
         
         # Notizen
         note_frame = ttk.Frame(save_frame)
@@ -140,7 +169,7 @@ class ModernBahnhofDistanzApp:
         self.status_label.pack()
 
         # Geocoder
-        self.geolocator = Nominatim(user_agent="train_journey_tracker")
+        self.geolocator = Nominatim(user_agent="travel_tracker")
         
         # Letzte Route speichern
         self.last_route = None
@@ -150,6 +179,25 @@ class ModernBahnhofDistanzApp:
 
         # Timer für Queue-Check
         self.check_queue()
+    def get_search_suffix(self):
+        """Gibt den Suchbegriff je nach Transportmittel zurück"""
+        mode = self.transport_mode.get()
+        if mode == "train":
+            return "bahnhof"
+        elif mode == "flight":
+            return "flughafen"
+        else:  # car
+            return ""
+
+    def update_labels(self):
+        """Aktualisiert die Labels basierend auf dem gewählten Transportmittel"""
+        mode = self.transport_mode.get()
+        if mode == "train":
+            self.add_stop_btn.config(text="+ Zwischenbahnhof hinzufügen")
+        elif mode == "flight":
+            self.add_stop_btn.config(text="+ Zwischenlandung hinzufügen")
+        else:  # car
+            self.add_stop_btn.config(text="+ Zwischenstopp hinzufügen")
 
     def add_stop(self):
         """Fügt ein neues Zwischenstop-Eingabefeld hinzu"""
@@ -180,108 +228,23 @@ class ModernBahnhofDistanzApp:
                 frame.destroy()
                 break
 
-    def save_journey(self):
-        """Speichert die aktuelle Reise in der Historie"""
-        if not self.last_route:
-            messagebox.showerror("Fehler", "Bitte erst eine Route berechnen!")
-            return
-            
-        # Erstelle Eintrag für die Historie
-        journey = {
-            "datum": self.date_picker.get_date().strftime("%Y-%m-%d"),
-            "zeitpunkt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "stationen": [],
-            "distanz": 0,
-            "notizen": self.note_entry.get().strip()
-        }
-        
-        # Füge alle Stationen hinzu
-        total_distance = 0
-        for i, (name, address, coords) in enumerate(self.last_route):
-            station = {
-                "name": name,
-                "address": address,
-                "koordinaten": {"lat": coords[0], "lon": coords[1]}
-            }
-            journey["stationen"].append(station)
-            
-            # Berechne Distanz zum nächsten Halt
-            if i < len(self.last_route) - 1:
-                next_coords = self.last_route[i + 1][2]
-                distance = geodesic(coords, next_coords).kilometers
-                total_distance += distance
-        
-        journey["distanz"] = round(total_distance, 1)
-        
-        # Lade bestehende Historie oder erstelle neue
-        try:
-            with open(self.history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            history = []
-        
-        # Füge neue Reise hinzu
-        history.append(journey)
-        
-        # Speichere aktualisierte Historie
-        with open(self.history_file, 'w', encoding='utf-8') as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-        
-        messagebox.showinfo("Erfolg", "Reise wurde gespeichert!")
-        self.note_entry.delete(0, tk.END)
-
-    def show_history(self):
-        """Zeigt die Reisehistorie in einem neuen Fenster an"""
-        try:
-            with open(self.history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-        except FileNotFoundError:
-            messagebox.showinfo("Info", "Noch keine Reisen gespeichert.")
-            return
-        
-        # Erstelle neues Fenster
-        history_window = tk.Toplevel(self.root)
-        history_window.title("Reisehistorie")
-        history_window.geometry("600x400")
-        
-        # Textbereich für Historie
-        text = tk.Text(history_window, wrap=tk.WORD, font=('Helvetica', 10))
-        text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(text)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        text.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=text.yview)
-        
-        # Formatiere und zeige Historie
-        for journey in sorted(history, key=lambda x: x["datum"], reverse=True):
-            text.insert(tk.END, f"Datum: {journey['datum']}\n")
-            text.insert(tk.END, "Route:\n")
-            
-            for i, station in enumerate(journey["stationen"]):
-                text.insert(tk.END, f"  {i+1}. {station['name']}\n")
-            
-            text.insert(tk.END, f"Distanz: {journey['distanz']} km\n")
-            if journey["notizen"]:
-                text.insert(tk.END, f"Notizen: {journey['notizen']}\n")
-            text.insert(tk.END, "\n" + "-"*50 + "\n\n")
-        
-        text.config(state=tk.DISABLED)  # Readonly
-
     def calculate_route(self):
         """Berechnet die optimierte Route"""
         try:
-            self.queue.put(("status", "Suche Stationen..."))
+            self.queue.put(("status", "Suche Orte..."))
             
             # Sammle alle Stationen
             stations = []
+            search_suffix = self.get_search_suffix()
             
             # Start
             start_name = self.start_entry.get().strip()
             if not start_name:
-                raise ValueError("Bitte Startbahnhof eingeben")
-            start = self.geolocator.geocode(f"{start_name} bahnhof", exactly_one=True)
+                raise ValueError("Bitte Startort eingeben")
+            start = self.geolocator.geocode(
+                f"{start_name} {search_suffix}".strip(), 
+                exactly_one=True
+            )
             if not start:
                 raise ValueError(f"Konnte '{start_name}' nicht finden")
             stations.append((start_name, start.address, (start.latitude, start.longitude)))
@@ -290,15 +253,21 @@ class ModernBahnhofDistanzApp:
             for _, entry in self.stop_entries:
                 stop_name = entry.get().strip()
                 if stop_name:  # Ignoriere leere Zwischenstops
-                    stop = self.geolocator.geocode(f"{stop_name} bahnhof", exactly_one=True)
+                    stop = self.geolocator.geocode(
+                        f"{stop_name} {search_suffix}".strip(), 
+                        exactly_one=True
+                    )
                     if stop:
                         stations.append((stop_name, stop.address, (stop.latitude, stop.longitude)))
             
             # Ziel
             end_name = self.end_entry.get().strip()
             if not end_name:
-                raise ValueError("Bitte Zielbahnhof eingeben")
-            end = self.geolocator.geocode(f"{end_name} bahnhof", exactly_one=True)
+                raise ValueError("Bitte Zielort eingeben")
+            end = self.geolocator.geocode(
+                f"{end_name} {search_suffix}".strip(), 
+                exactly_one=True
+            )
             if not end:
                 raise ValueError(f"Konnte '{end_name}' nicht finden")
             stations.append((end_name, end.address, (end.latitude, end.longitude)))
@@ -396,6 +365,108 @@ class ModernBahnhofDistanzApp:
                 abs_path = os.path.abspath(map_path)
                 webbrowser.open('file://' + abs_path)
 
+    def save_journey(self):
+        """Speichert die aktuelle Reise in der Historie"""
+        if not self.last_route:
+            messagebox.showerror("Fehler", "Bitte erst eine Route berechnen!")
+            return
+            
+        # Erstelle Eintrag für die Historie
+        journey = {
+            "datum": self.date_picker.get_date().strftime("%Y-%m-%d"),
+            "zeitpunkt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "transportmittel": self.transport_mode.get(),
+            "dauer": self.duration_entry.get().strip(),
+            "stationen": [],
+            "distanz": 0,
+            "notizen": self.note_entry.get().strip()
+        }
+        
+        # Füge alle Stationen hinzu
+        total_distance = 0
+        for i, (name, address, coords) in enumerate(self.last_route):
+            station = {
+                "name": name,
+                "address": address,
+                "koordinaten": {"lat": coords[0], "lon": coords[1]}
+            }
+            journey["stationen"].append(station)
+            
+            # Berechne Distanz zum nächsten Halt
+            if i < len(self.last_route) - 1:
+                next_coords = self.last_route[i + 1][2]
+                distance = geodesic(coords, next_coords).kilometers
+                total_distance += distance
+        
+        journey["distanz"] = round(total_distance, 1)
+        
+        # Lade bestehende Historie oder erstelle neue
+        try:
+            with open(self.history_file, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            history = []
+        
+        # Füge neue Reise hinzu
+        history.append(journey)
+        
+        # Speichere aktualisierte Historie
+        with open(self.history_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+        
+        messagebox.showinfo("Erfolg", "Reise wurde gespeichert!")
+        self.note_entry.delete(0, tk.END)
+        self.duration_entry.delete(0, tk.END)
+
+    def show_history(self):
+        """Zeigt die Reisehistorie in einem neuen Fenster an"""
+        try:
+            with open(self.history_file, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+        except FileNotFoundError:
+            messagebox.showinfo("Info", "Noch keine Reisen gespeichert.")
+            return
+        
+        # Erstelle neues Fenster
+        history_window = tk.Toplevel(self.root)
+        history_window.title("Reisehistorie")
+        history_window.geometry("600x400")
+        
+        # Textbereich für Historie
+        text = tk.Text(history_window, wrap=tk.WORD, font=('Helvetica', 10))
+        text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(history_window)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        text.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=text.yview)
+
+        # Icons für Transportmittel
+        transport_icons = {
+            "train": "🚂",
+            "flight": "✈️",
+            "car": "🚗"
+        }
+        
+        # Formatiere und zeige Historie
+        for journey in sorted(history, key=lambda x: x["datum"], reverse=True):
+            transport_icon = transport_icons.get(journey.get("transportmittel", "train"), "🚂")
+            text.insert(tk.END, f"Datum: {journey['datum']} {transport_icon}\n")
+            text.insert(tk.END, "Route:\n")
+            
+            for i, station in enumerate(journey["stationen"]):
+                text.insert(tk.END, f"  {i+1}. {station['name']}\n")
+            
+            text.insert(tk.END, f"Distanz: {journey['distanz']} km\n")
+            if journey.get("dauer"):
+                text.insert(tk.END, f"Dauer: {journey['dauer']} Stunden\n")
+            if journey["notizen"]:
+                text.insert(tk.END, f"Notizen: {journey['notizen']}\n")
+            text.insert(tk.END, "\n" + "-"*50 + "\n\n")
+        
+        text.config(state=tk.DISABLED)  # Readonly
+
     def check_queue(self):
         """Prüft die Queue auf Nachrichten vom Worker-Thread"""
         try:
@@ -430,5 +501,5 @@ class ModernBahnhofDistanzApp:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = ModernBahnhofDistanzApp(root)
+    app = ModernRouteTrackerApp(root)
     root.mainloop()

@@ -1,6 +1,6 @@
 # Travel Tracker
 
-A Python tool to track and visualize your travels using various modes of transportation.
+A Python tool to track and visualize your travels using various modes of transportation. Currently it only tracks air distance, which includes all in-between stops. An exact tracking of rails, airplane or train type and similar will follow if possible. I will also add a visualization tool for your history -- so you can already start tracking. 
 
 ## Features
 
@@ -48,11 +48,11 @@ python travel_tracker.py
 4. Optionally, add stops
 5. Click "Calculate Route"
 6. Visualize the route on the map
-7. Save the trip with date and notes
+7. Save the trip with date, time, and notes
 
 ## Files
 
-- `travel_tracker.py`: Main program
+- `Travel_Distance_Tracker.py`: Main program
 - `travel_history.json`: Saved trips (created automatically)
 - `route_map.html`: Temporary map file for visualization
 
@@ -67,6 +67,6 @@ python travel_tracker.py
 ## Tips
 
 - For train routes, simply enter the city name; "Station" will be automatically appended.
-- For flights, enter either the airport or city name.
+- For flights, enter either the airport or city name. Soekarno-Hatta International is e.g. needed instead of Jakarta.
 - For car routes, you can add any locations as stops.
 - You can access the travel history at any time using the corresponding button.
